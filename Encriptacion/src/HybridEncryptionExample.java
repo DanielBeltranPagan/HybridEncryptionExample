@@ -2,6 +2,7 @@ import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.Base64;
 import java.util.Scanner;
@@ -9,45 +10,60 @@ import java.util.Scanner;
 public class HybridEncryptionExample {
 
     public static void main(String[] args) throws Exception {
-
         Scanner scanner = new Scanner(System.in);
         System.out.print("Introduce un mensaje: ");
         String message = scanner.nextLine();
 
-        KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
-        keyGenerator.init(128);
-        SecretKey secretKeyAES = keyGenerator.generateKey();
+        KeyPair keyPair = generarParClavesRSA();
+        SecretKey claveAES = generarClaveAES();
 
-        Cipher cipherAES = Cipher.getInstance("AES");
-        cipherAES.init(Cipher.ENCRYPT_MODE, secretKeyAES);
-        byte[] mensajeCifradoAES = cipherAES.doFinal(message.getBytes());
+        byte[] mensajeCifrado = cifrarMensajeAES(message, claveAES);
+        byte[] claveAESCifrada = cifrarClaveAESConRSA(claveAES, keyPair.getPublic());
 
-        System.out.println("\nMensaje cifrado con AES:");
-        System.out.println(Base64.getEncoder().encodeToString(mensajeCifradoAES));
+        System.out.println("\nMensaje cifrado: " + Base64.getEncoder().encodeToString(mensajeCifrado));
+        System.out.println("Clave AES cifrada: " + Base64.getEncoder().encodeToString(claveAESCifrada));
 
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-        keyPairGenerator.initialize(2048);
-        KeyPair keyPair = keyPairGenerator.generateKeyPair();
+        SecretKey claveRecuperada = descifrarClaveAESConRSA(claveAESCifrada, keyPair.getPrivate());
+        String mensajeFinal = descifrarMensajeAES(mensajeCifrado, claveRecuperada);
 
-        PublicKey clavePublicaRSA = keyPair.getPublic();
-        PrivateKey clavePrivadaRSA = keyPair.getPrivate();
+        System.out.println("\nMensaje descifrado: " + mensajeFinal);
+    }
 
-        Cipher cipherRSA = Cipher.getInstance("RSA");
-        cipherRSA.init(Cipher.ENCRYPT_MODE, clavePublicaRSA);
-        byte[] claveAESCifrada = cipherRSA.doFinal(secretKeyAES.getEncoded());
+    private static SecretKey generarClaveAES() throws Exception {
+        KeyGenerator kg = KeyGenerator.getInstance("AES");
+        kg.init(128);
+        return kg.generateKey();
+    }
 
-        System.out.println("\nClave AES cifrada con RSA:");
-        System.out.println(Base64.getEncoder().encodeToString(claveAESCifrada));
+    private static byte[] cifrarMensajeAES(String mensaje, SecretKey clave) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.ENCRYPT_MODE, clave);
+        return cipher.doFinal(mensaje.getBytes(StandardCharsets.UTF_8));
+    }
 
-        cipherRSA.init(Cipher.DECRYPT_MODE, clavePrivadaRSA);
-        byte[] claveAESDescifradaBytes = cipherRSA.doFinal(claveAESCifrada);
+    private static String descifrarMensajeAES(byte[] datos, SecretKey clave) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES");
+        cipher.init(Cipher.DECRYPT_MODE, clave);
+        byte[] original = cipher.doFinal(datos);
+        return new String(original, StandardCharsets.UTF_8);
+    }
 
-        SecretKey claveAESDescifrada = new SecretKeySpec(claveAESDescifradaBytes, "AES");
+    private static KeyPair generarParClavesRSA() throws Exception {
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
+        kpg.initialize(2048);
+        return kpg.generateKeyPair();
+    }
 
-        cipherAES.init(Cipher.DECRYPT_MODE, claveAESDescifrada);
-        byte[] mensajeDescifrado = cipherAES.doFinal(mensajeCifradoAES);
+    private static byte[] cifrarClaveAESConRSA(SecretKey claveAES, PublicKey publica) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.ENCRYPT_MODE, publica);
+        return cipher.doFinal(claveAES.getEncoded());
+    }
 
-        System.out.println("\nMensaje descifrado:");
-        System.out.println(new String(mensajeDescifrado));
+    private static SecretKey descifrarClaveAESConRSA(byte[] claveCifrada, PrivateKey privada) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, privada);
+        byte[] claveDescifradaBytes = cipher.doFinal(claveCifrada);
+        return new SecretKeySpec(claveDescifradaBytes, "AES");
     }
 }
